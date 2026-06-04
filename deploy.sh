@@ -94,6 +94,24 @@ should_run() {
 
 tf() { (cd "${TF_DIR}" && terraform "$@" 2>&1 | tee -a "${LOG_FILE}"); }
 
+# Check AWS credentials are valid; if SSO-based, prompt re-login on expiry
+assert_aws_auth() {
+  local out err
+  out=$(aws sts get-caller-identity --region "${REGION}" 2>&1) || {
+    err="$out"
+    if echo "$err" | grep -q "IncompleteSignature\|ExpiredToken\|InvalidClientTokenId\|Token has expired"; then
+      echo -e "\n${YELLOW}${BOLD}⚠  AWS session expired.${RESET}"
+      echo -e "   Run ${CYAN}aws sso login${RESET} in another terminal, then press Enter to retry."
+      read -r
+      # retry once
+      aws sts get-caller-identity --region "${REGION}" >/dev/null 2>&1 \
+        || die "AWS credentials still invalid after re-login attempt."
+    else
+      die "AWS auth failed: ${err}"
+    fi
+  }
+}
+
 # ── Banner ────────────────────────────────────────────────────────
 
 echo "" >> "${LOG_FILE}"
@@ -158,8 +176,9 @@ fi
 if should_run 2; then
   step 2 "Verifying AWS credentials"
 
+  assert_aws_auth
   IDENTITY=$(aws sts get-caller-identity --output json 2>&1) \
-    || die "AWS credentials not configured.\nRun: aws configure\nThen re-run this script."
+    || die "AWS credentials not configured.\nRun: aws configure  (or: aws sso login)\nThen re-run this script."
 
   ACCOUNT_ID=$(echo "$IDENTITY" | python3 -c "import sys,json; print(json.load(sys.stdin)['Account'])")
   USER_ARN=$(echo "$IDENTITY"   | python3 -c "import sys,json; print(json.load(sys.stdin)['Arn'])")
@@ -335,29 +354,39 @@ if should_run 9; then
   CRAWLERS=("${PREFIX}-bronze-companies" "${PREFIX}-bronze-cashflows" \
             "${PREFIX}-bronze-pipeline"  "${PREFIX}-bronze-fund")
 
-  MAX_WAIT=300   # 5 minutes
-  POLL=10
+  MAX_WAIT=600   # 10 minutes
+  POLL=15
   ELAPSED=0
   ALL_DONE=false
 
   while [[ $ELAPSED -lt $MAX_WAIT ]]; do
+    # Re-validate credentials on every poll cycle; prompts re-login if expired
+    assert_aws_auth
+
     ALL_DONE=true
     for crawler in "${CRAWLERS[@]}"; do
-      STATUS=$(aws glue get-crawler --name "${crawler}" --region "${REGION}" \
-        --query 'Crawler.LastCrawl.Status' --output text 2>/dev/null || echo "UNKNOWN")
       STATE=$(aws glue get-crawler --name "${crawler}" --region "${REGION}" \
         --query 'Crawler.State' --output text 2>/dev/null || echo "UNKNOWN")
+      STATUS=$(aws glue get-crawler --name "${crawler}" --region "${REGION}" \
+        --query 'Crawler.LastCrawl.Status' --output text 2>/dev/null || echo "UNKNOWN")
 
-      if [[ "$STATE" == "RUNNING" ]]; then
-        ALL_DONE=false
-        echo -ne "  ⏳  ${crawler}: running (${ELAPSED}s)...\r"
-      elif [[ "$STATUS" == "SUCCEEDED" ]]; then
-        : # already done
-      else
-        ALL_DONE=false
-        echo -ne "  ⏳  ${crawler}: ${STATE}/${STATUS} (${ELAPSED}s)...\r"
-      fi
+      case "$STATE" in
+        RUNNING|STOPPING)
+          ALL_DONE=false
+          echo -ne "  ⏳  ${crawler}: ${STATE} (${ELAPSED}s elapsed)...\r"
+          ;;
+        READY)
+          if [[ "$STATUS" != "SUCCEEDED" ]]; then
+            ALL_DONE=false
+          fi
+          ;;
+        *)
+          ALL_DONE=false
+          echo -ne "  ⏳  ${crawler}: state=${STATE} status=${STATUS} (${ELAPSED}s)...\r"
+          ;;
+      esac
     done
+
     ${ALL_DONE} && break
     sleep $POLL
     ELAPSED=$(( ELAPSED + POLL ))
@@ -366,8 +395,8 @@ if should_run 9; then
   echo "" # clear the \r line
 
   if ! ${ALL_DONE}; then
-    warn "Some crawlers didn't finish within ${MAX_WAIT}s — check AWS Console"
-    warn "You can re-run step 9: bash deploy.sh --step 9"
+    warn "Some crawlers didn't finish within ${MAX_WAIT}s"
+    warn "Re-run when done: bash deploy.sh --step 9"
   fi
 
   echo ""
