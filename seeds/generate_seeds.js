@@ -5,13 +5,26 @@
 
 const fs   = require("fs");
 const path = require("path");
+const vm   = require("vm");
 
-// Load data from the dashboard data.js
+// Load data.js into an isolated VM context so const/let declarations
+// are accessible as properties on the context object (eval() in strict
+// Node modules only exposes var, not const/let).
 const dataPath = path.resolve(__dirname, "../../pe-dashboard/data.js");
 const src = fs.readFileSync(dataPath, "utf8")
-  // strip JS helper functions at the bottom so eval doesn't fail
-  .replace(/^function .+[\s\S]*?^}/gm, "");
-eval(src);
+  // strip helper functions — not needed for CSV generation
+  .replace(/^function \w[\s\S]*?^}/gm, "")
+  // const/let are block-scoped and never exposed on the VM context object;
+  // replacing with var makes them land on ctx as expected
+  .replace(/\bconst\b/g, "var")
+  .replace(/\blet\b/g, "var");
+
+const ctx = {};
+vm.createContext(ctx);
+vm.runInContext(src, ctx);
+
+const { FUND, COMPANIES, QUARTERLY_CASHFLOWS, FUND_HISTORY,
+        PIPELINE, SECTOR_BREAKDOWN, GEO_BREAKDOWN } = ctx;
 
 const OUT = path.join(__dirname, "csv");
 if (!fs.existsSync(OUT)) fs.mkdirSync(OUT);
