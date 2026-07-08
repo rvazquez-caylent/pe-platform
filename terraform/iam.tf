@@ -75,6 +75,7 @@ data "aws_iam_policy_document" "lambda_api" {
       "athena:GetQueryExecution",
       "athena:GetQueryResults",
       "athena:StopQueryExecution",
+      "athena:GetWorkGroup",
     ]
     resources = ["*"]
   }
@@ -99,12 +100,24 @@ data "aws_iam_policy_document" "lambda_api" {
     ]
   }
   statement {
-    sid     = "S3AthenaResultsReadWrite"
-    actions = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+    sid = "S3AthenaResultsReadWrite"
+    actions = [
+      "s3:GetBucketLocation",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:ListBucket",
+      "s3:AbortMultipartUpload",
+      "s3:ListMultipartUploadParts",
+    ]
     resources = [
       aws_s3_bucket.athena_results.arn,
       "${aws_s3_bucket.athena_results.arn}/*",
     ]
+  }
+  statement {
+    sid     = "PollyTTS"
+    actions = ["polly:SynthesizeSpeech"]
+    resources = ["*"]
   }
 }
 

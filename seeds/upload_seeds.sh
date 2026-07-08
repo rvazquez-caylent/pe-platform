@@ -22,15 +22,16 @@ upload() {
     --metadata "source=seed,load_date=${DATE}"
 }
 
+# One dedicated directory per entity so Athena table locations don't overlap
 upload "${CSV_DIR}/fund_metrics.csv"         "bronze/fund-metrics/load_date=${DATE}/fund_metrics.csv"
 upload "${CSV_DIR}/portfolio_companies.csv"  "bronze/portfolio-companies/load_date=${DATE}/portfolio_companies.csv"
-upload "${CSV_DIR}/company_revenue.csv"      "bronze/portfolio-companies/load_date=${DATE}/company_revenue.csv"
-upload "${CSV_DIR}/company_ebitda.csv"       "bronze/portfolio-companies/load_date=${DATE}/company_ebitda.csv"
+upload "${CSV_DIR}/company_revenue.csv"      "bronze/company-revenue/load_date=${DATE}/company_revenue.csv"
+upload "${CSV_DIR}/company_ebitda.csv"       "bronze/company-ebitda/load_date=${DATE}/company_ebitda.csv"
 upload "${CSV_DIR}/quarterly_cashflows.csv"  "bronze/cashflows/load_date=${DATE}/quarterly_cashflows.csv"
-upload "${CSV_DIR}/fund_history.csv"         "bronze/cashflows/load_date=${DATE}/fund_history.csv"
-upload "${CSV_DIR}/deal_pipeline.csv"        "bronze/pipeline/load_date=${DATE}/deal_pipeline.csv"
-upload "${CSV_DIR}/sector_breakdown.csv"     "bronze/fund-metrics/load_date=${DATE}/sector_breakdown.csv"
-upload "${CSV_DIR}/geo_breakdown.csv"        "bronze/fund-metrics/load_date=${DATE}/geo_breakdown.csv"
+upload "${CSV_DIR}/fund_history.csv"         "bronze/fund-history/load_date=${DATE}/fund_history.csv"
+upload "${CSV_DIR}/deal_pipeline.csv"        "bronze/deal-pipeline/load_date=${DATE}/deal_pipeline.csv"
+upload "${CSV_DIR}/sector_breakdown.csv"     "bronze/sector-breakdown/load_date=${DATE}/sector_breakdown.csv"
+upload "${CSV_DIR}/geo_breakdown.csv"        "bronze/geo-breakdown/load_date=${DATE}/geo_breakdown.csv"
 
 echo ""
 echo "✅  Upload complete."
