@@ -21,7 +21,19 @@ dist/
 # Node
 node_modules/
 
+# macOS
+.DS_Store
+
 # AWS credentials — never commit these
 .env
 *.env
 credentials
+.account_id
+.tf_outputs
+*.tfplan
+tfplan
+
+# Deploy artifacts / logs
+deploy.log
+api/.build/
+api/lambda.zip
